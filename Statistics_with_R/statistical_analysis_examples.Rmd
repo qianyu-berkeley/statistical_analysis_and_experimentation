@@ -1,0 +1,866 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+```{r, echo=FALSE}
+knitr::opts_chunk$set(error = TRUE)
+```
+---
+title: "Statistical Analysis"
+output:
+  pdf_document: default
+  html_notebook: default
+  html_document: default
+---
+
+## Section 1: Statistics Concepts
+
+### 1. Normal distribution
+
+$$
+\begin{aligned}
+\text{PDF} &= \dfrac{1}{\sigma\sqrt{2\pi} } \ \text{exp}\bigg( -\dfrac{(x_i-\mu)^2}{2\sigma^2}\bigg) \\
+\underbrace{\text{Log Likelihood}}_{\text{ for } n \text{ independent } N(\mu, 1)} &= \dfrac{1}{2} \sum_{i=1}^n (x_i - \mu)^2 - n \log(\sqrt{2 \pi})\\
+\sigma^2 &= \dfrac{1}{n - 1} \sum_{i=1}^n (x_i - \mu)^2 \\
+\text{SE} &= \dfrac{\sigma}{\sqrt{n}}
+\end{aligned}
+$$
+
+#### R functions
+* dnorm : Density or height of prob distribution
+* pnorm : Cumulative distribution (area) probability
+* qnorm : inverse of pnorm give quantile, give prob, returns z score 
+* rnorm : random number from normal distribution
+
+popultion property
+```{r}
+u = 10000 # mean
+sigma = 1000 # standard deviation
+
+# If you select 10 humans at random, what is the probablity that the average is greater than 10300 ? 
+N = 10 
+se = sigma / sqrt(N)
+z= (10300 - u) / se
+prob= 1 - pnorm(z)
+prob
+
+# What is the probablity that the average number of tastebds they have is between 9500 and 10500
+z1 = (9500 - u)/se
+z2= (10500 - u)/se
+prob2= pnorm(z2) - pnorm(z1)
+prob2
+```
+
+### 2. Z Statistics
+
+```{r}
+# Z value
+z1= qnorm(p = 0.95, mean = 0, lower.tail = T)
+z2= qnorm(p = 0.95, mean = 0, lower.tail = F)
+z3= qnorm(p = 0.975, mean = 0, lower.tail = T)
+sprintf('z1 = %f z2 = %f z3 = %f', z1, z2, z3)
+sprintf('p1 = %f p1 = %f, p3 = %f', pnorm(z1), pnorm(z2), pnorm(z2))
+```
+
+### 3. Standard Error: SE
+
+The following code shows that the larger the number of samples draw from a population, the smaller SE of sample mean.
+
+```{r}
+# simple line of code
+x = 10
+
+my.f = function(N){
+  # create a random normal distribution
+  z = rnorm(N) 
+  # Find mean
+  zbar = mean(z)
+  return(zbar)
+}
+
+result = replicate(n = 10000, expr = my.f(10))
+result2 = replicate(n = 10000, expr = my.f(20))
+result3 = replicate(n = 10000, expr = my.f(50))
+
+plot(density(result))
+lines(density(result2) , col='red')
+lines(density(result3) , col='green')
+```
+
+### 4. **Center Limit Theorem**
+
+**Definition**: when independent random variables are added, their properly normalized sum tends toward a normal distribution even if the original variables themselves are not normally distributed.
+
+Sample distribution of variables, we use sample with replacement because population size is small and every draw has the same distribution and can draw many number of times
+
+```{r}
+# Please note the sample are the shoe sizes
+shoe.pop = c(12, 11, 10, 11.5, 11, 11, 8.5,7, 6.5, 9.5, 10, 9.5, 9.5)
+N = 1000 # Sample size   
+sample1 = sample(shoe.pop, size=N, replace=TRUE)
+mean.sample <- mean(sample1)
+sd.sample <- sd(sample1)
+hist(sample1, breaks=5, probability = TRUE)
+```
+
+Sample size N determine the SE sigma/sqrt(N), the larger the N, the smaller the SD of the mean, the tight the curve.  As N increases, sample mean distribution become close to normal distribution
+
+```{r}
+mysamplemean <- function(N) {
+    sam1 = sample(shoe.pop, size=N, replace=TRUE)
+    sam.mean = mean(sam1)
+    return(sam.mean)
+}
+samplesize <- 10000 
+
+sam.means <- replicate(n=1000, mysamplemean(samplesize))
+sam.means.mean = mean(sam.means)
+sam.means.sd  = sd(sam.means)
+prs <- sprintf("The mean of sample means: %2.3f,
+               the sd of sample means is: %2.3f", sam.means.mean, sam.means.sd)
+hist(sam.means, breaks = 50, probability = TRUE, main = prs)
+plot(density(sam.means))
+```
+
+
+**Why central Limint Theorm is Significant? The frequncy distribution of sample means of any underlying distribution with very large sample size is a normal distribution which is a nice assumption. When sample size is large, we use apply property of normal distribution**
+
+### 5. Confidence Interval
+
+**Definition**: If we were to draw 100 samples from same population, approximately 95 of them would contain the parameter. In other words, We sample from a distribution and calculate the mean, there are 95% probability the mean will fall into the confidence interval
+
+It measure of variability due to sampling error. Different samples drawn from that same population would in general have different values of the sample mean, so there is a distribution of sampled means. 
+
+Use normal distribution to approximate the distribution of error about a binomially-distributed observation. The Central Limit Theorem applies poorly to this distribution with a sample size less than 30 or where the proportion is close to 0 or 1. 
+
+$$
+\text{CI} = p \pm 1.96 \times \underbrace{\text{SE for percent}}_{\text{w/ replacement}}
+$$
+
+```{r}
+confint = function(SampleSize) {
+    x = runif(SampleSize)
+    pop.sd = 0.2886895 # population standard deviation
+    x.bar = mean(x) # Sample mean
+    se = pop.sd/sqrt(SampleSize) # SE
+    upper = x.bar + 1.96*se # upper = mean + z (alpha/2) * SE
+    lower = x.bar - 1.96*se # lower = mean - z (alpha/2) * SE
+    contained = (lower < 0.5 ) & (0.5 < upper)
+    return(contained)
+}
+
+res = replicate(1e3 , confint(SampleSize = 1000) )
+print(mean(res))
+```
+
+## Section 2. Statistical Testing
+
+### 1. Hypothesis Testing Definition
+
+**Definition**: Hypothesis statements contain two or more variables that are **measurable** that specify how the variables are related
+
+* H0: null hypothesis 
+* Ha: alternative hypothesis
+* A test is rule of rejecting H0 based on the observed data and risk-level (Reject H0 if …)
+    * if p_value < 0.05
+    * if |Z| > Z_alpha for 2 tails, Z < -Z_alpha, Z > Z_alpha 1 tail
+* 2 Actions: Reject H0 or do not reject H0
+ 
+|                |  H0 True        |  Ha True           |
+|:---------------|:----------------|:-------------------|
+| Reject H0      | Type 1 Err (FP) |                    |
+| Not  Reject H0 |                 | Type 2 err (FN)    |
+
+#### Example 1
+
+You take a random sample of 100 Berkeley students to find out if their ground beef consumption is any different than the nation at large. The mean among sample is 2.45 pounds per month. What is the p-value corresponding to the null hypothesis that Berkeley students eat the same amount, on the average compare to the nation at large? what is an appropriate alternative hypothesis?
+
+* H0: u_berkeley = u_nation
+* Ha: u_berkeley != u_nation
+
+```{r}
+u_berkeley = 2.45 # sample mean
+u = 2 # population mean
+sd = 2 # population sd
+N = 100 # sample size
+Z_berkeley = (u_berkeley - u) / (sd/sqrt(N))
+
+alpha = 0.05 # alpha/2 = 0.025
+alpha_2_tail = alpha/2
+p_value = 2 * (1 - pnorm(Z_berkeley))
+p_value
+p_value < alpha_2_tail
+```
+
+p_value is < 0.025 which is statistically significant, we can reject the H0 that berkeley student's ground beef consumption is the same as average consumption of the nation
+
+#### Hypothesis Test function
+
+A function that takes a sample data, mean of the null hypothesis, population standard deviation a boolean variable for 1 or 2 tailed test a boolean variable for left or right tail, return P-value for this test, and use 5% critical value $\alpha$
+
+```{r}
+hp_test = function(sample_data, mean_null, sd_p, two_tailed=TRUE, left_tail=NULL) {
+    alpha <- 0.05 # Use 5% critical value
+    N <- length(sample_data) # Calculate sample size
+    sample_mean <- mean(sample_data) # Calculate sample mean from the sample data
+    se <- sd_p/sqrt(N) # calculate SE
+    z_score <- (sample_mean - mean_null) / se # Calculate Z-score
+    # Hypothesis testing
+    # two_tailed is true: 2 tailed test, false: 1 tailed test
+    # left_tail is true: left, False: right
+    if (two_tailed) {
+        p_value <- 2 * (1- pnorm(abs(z_score)))
+        reject <- p_value < alpha
+    } else {
+        if (left_tail) {
+            p_value <- pnorm(z_score)
+            reject <- p_value < alpha
+        } else {
+            p_value <- 1 - pnorm(z_score)
+            reject <- p_value < alpha
+        }
+    }
+    result <- list(p.value = p_value, reject.null = reject)
+    return(result)
+}
+
+display_result = function(r) {
+    if (r$reject.null) {
+        paste("We reject the null hypthesis. The P-value of the test is ", r$p.value)
+    } else {
+        paste("We do not reject the null hypthesis. The P-value of the test is ", r$p.value)
+    }
+}
+```
+
+
+### 2. Test Assumptions 
+
+#### Assumption 1: Normality
+
+* **Shapiro-Wilk**: Test whether a series normally distributed. This is to test assumption data. The **Null** is that the underlying data is normally distributed. We can also use qq-norm plot
+
+* Transform data/Feature transform 
+    * 
+
+```{r}
+library(ggplot2)
+library(car)
+library(psych)
+
+# load the countries dataset, including 
+# corruption and internet growth variables
+load("./data/Countries2.Rdata")
+summary(Countries)
+
+# use a histogram to see if the distribution of gdp looks normal
+graph1 = ggplot(Countries, aes(gdp))
+graph1 + geom_histogram(color='black', fill='light blue')
+
+# check normality using a qqplot
+qqplot = qplot(sample = Countries$gdp, stat="qq")
+qqplot
+
+# Finally, use a Shapiro-Wilk test to see if normality is a plausible hypothesis
+shapiro.test(Countries$gdp)
+```
+
+Shapiro-Wilk show p-value < 0.05 which is statistical significant, we can reject the null hypothese that the data is normally distributed
+
+To transform to using log (this is common on econometric data)
+
+```{r}
+# Next, let's do the same thing with the log of gdp
+# This is a very common transformation in econometrics
+Countries$loggdp = log10(Countries$gdp)
+
+# Begin with the Shapiro-Wilk test
+shapiro.test(Countries$loggdp)
+
+# But look at the shape of the qqplot
+qqnorm(Countries$loggdp)
+
+# use a histogram to see if the distribution of loggdp looks normal
+graph1 = ggplot(Countries, aes(x = loggdp))
+graph1 + geom_histogram(color = 'black', fill = 'light blue')
+```
+
+#### Assumption 1: Homogenity of variance
+
+* **Levene Test**: Test whether two or more series is satisfy Homogeneity of variance assumption. The **null** is the two series's variances is homogeneious.
+
+```{r}
+# First, check the means
+by(Countries$loggdp, Countries$high_cpi, mean, na.rm = TRUE)
+
+# check if the variances are the same for both groups
+by(Countries$loggdp, Countries$high_cpi, var, na.rm = TRUE)
+
+# use a Levene test to see if equal variances is a plausible hypothesis
+leveneTest(Countries$loggdp, Countries$high_cpi)
+```
+
+P-value is > 0.05, we cannot reject the hypothese that the variance is homogeneious.
+
+### 3. Test of association
+
+### If numerical => Pearson correlation
+### If categorical => Chi-square test
+
+#### Small Example
+```{r}
+library(foreign)
+insurgency = read.dta("./data/lyall2010.dta")
+head(insurgency)
+
+# variable types
+insurgency$dur # Month of war (ratio variable)
+insurgency$wdl # Categorical / Ordinal
+insurgency$pol2 # Ordinal variable / Interval variable
+insurgency$occ # Binary
+
+scatterplot(insurgency$pol2, insurgency$dur)
+cor.test(insurgency$pol2, insurgency$dur)
+cor(insurgency[,c("pol2", "dur")], use = "pairwise.complete.obs")
+
+table(insurgency$occ, insurgency$wdl)
+cs = chisq.test(insurgency$occ, insurgency$wdl)
+cs
+cs$stdres
+cs$expected
+```
+
+
+#### Extensive example
+#### Create data
+```{r}
+# car gives us nice scatterplots
+library(car)
+
+# We'll use our Country-by-Country dataset
+load("./data/Countries2.Rdata")
+summary(Countries)
+
+# We'll also use Google's dataset of takedown requests -
+# that is, orders that come from governments of 
+# different countries to remove certain content 
+# from Youtube, search results, and other online products.
+# Each row of this dataset corresponds to a specific
+# country and a specific online product (you can think
+# of the unit of analysis as country x product), and there
+# are several variables of interest:
+#
+# Country - the country making specific takedown requests
+# Product - the online product the content is hosted on 
+#           (Youtube, Blogger, etc)
+# Reason - a reason why the content is being targeted 
+#           (copyright violation, government criticism, etc..)
+# Court.Orders - the number of requests from the Country's 
+#             court system
+# Executive..Police..etc. - the number of requests from the
+#             executive and other branches of government
+# Items.Requested.To.Be.Removed - the number of separate items
+#             of content.  However, this variable seems to
+#             have a lot of missing values
+
+# Read in the data
+Requests = read.csv("./data/Removal_Requests.csv")
+head(Requests)
+
+# Note that there are multiple rows per country in 
+# the Requests dataframe.
+
+# Create a new variable for total number of requests from
+# all branches of government
+Requests$total.takedowns = Requests$Court.Orders + Requests$Executive..Police..etc.
+
+# To merge our datasets, we first need to sum together all the
+# rows for each country in the Requests dataset, so that 
+# each country only appears in one row.
+# (we'll lose some variables when we do this, such as the product 
+# the request referred to)
+R2 = aggregate(Requests[,c("Court.Orders", "Executive..Police..etc.", "total.takedowns")], list(Country = Requests$Country), sum)
+
+# Notice that there's one row per country now.
+head(R2)
+
+# Perform the merge
+Countries = merge(Countries, R2, by="Country", all=T)
+
+head(Countries)
+```
+
+
+#### Correlation
+```{r}
+### Correlation: Linear relationships between metric variables
+
+# Let's examine the relationship between corruption 
+# and takedown requests.
+
+# Use a scatterplot to see how linear the relationship looks
+scatterplot(Countries$cpi, Countries$total.takedowns)
+
+#check the correlation
+cor.test(Countries$cpi, Countries$total.takedowns)
+
+# the cor function allows us to construct a correlation matrix
+cor(Countries[,c("gdp", "cpi", "total.takedowns")], use = "pairwise.complete.obs")
+
+# the output is actually a matrix object, so we can 
+# do things like square each value to get R-squared
+cor(Countries[,c("gdp", "cpi", "total.takedowns")], use = "pairwise.complete.obs")**2
+```
+
+
+#### Chi-square test
+```{r}
+### Chi-square: Testing for relationships between categorical variables
+# Here are three different approaches, depending on structure of dataset
+
+## 1. Two categorical variables
+
+# Look at the frequency table between region and whether a country is corrupt
+table(Countries$region, Countries$high_cpi)
+
+# We store the results of our chi-square test so we can extract more
+# values from the output
+cs = chisq.test(Countries$region, Countries$high_cpi)
+
+# Examine the test result
+cs
+
+# Look at the std. residuals to see which regions contribute most to the result
+cs$stdres
+
+# Check the expected counts to see if any are less than 5 and
+# if we should therefore try Fisher's exact test
+cs$expected
+
+# Use Fisher's exact test in this case:
+fisher.test(Countries$region, Countries$high_cpi)
+
+# For an effect size, we could compute Cramer's V manually
+# We may wish to put the code in a function so we can use
+# it again whenever we want.
+cramers_v = function(cs)
+{
+	cv = sqrt(cs$statistic / (sum(cs$observed) * (min(dim(cs$observed))-1)))
+	print.noquote("Cramer's V:")
+	return(as.numeric(cv))
+}
+
+# run our new function on our chi-square test
+cramers_v(cs)
+
+# As a rule of thumb,
+# Cramer's V under .2 is weak
+# between .2 and .4 is strong
+# and above .4 is very strong
+
+## 2. Count data, one variable in columns
+
+# Consider each request to be the unit of analysis, and consider two variables:
+# Whether it came from a corrupt or trustworthy country; and whether it came
+# through a court order or executive/police action.  We want to know if these
+# variables are independent or related.
+
+# We can use aggregate to collapse the rows to just the high_cpi variable
+Corrupt_Source = aggregate(Countries[,c("Court.Orders", "Executive..Police..etc.")], list(high_cpi = Countries$high_cpi), sum, na.rm=T)
+
+# Note that we've created a table of counts:
+Corrupt_Source
+
+# Not required, but we can add row names to make the chi-square output prettier
+rownames(Corrupt_Source)=Corrupt_Source$high_cpi
+
+# We want to plug our count table into the chi-square test
+# but we first have to remove the first column,
+# because it's a factor.
+# Otherwise, R will throw an error.
+# Notice that we can use a negative index to omit columns
+# That is, we can choose columns 2 and 3 with c(2,3)
+# or we can get the same thing by skipping column 1 with c(-1)
+Corrupt_Source[,c(-1)]
+
+# Plug this into the Chi-square test
+cs = chisq.test(Corrupt_Source[,c(-1)])
+cs
+
+# Look at the standardized residuals to see which direction the effect is in
+cs$stdres
+
+# Check the expected counts to see if any are less than 5 and
+# if we should therefore try Fisher's exact test
+cs$expected
+
+# Since we have a 2x2 matrix, we can measure the effect
+# size elegantly as an odds ratio.
+# First, get the odds an order came from a Court for
+# corrupt countries
+corrupt_odds = Corrupt_Source["Corrupt","Court.Orders"] / Corrupt_Source["Corrupt","Executive..Police..etc."]
+
+# Do the same for the trustworth countries.
+trustworthy_odds = Corrupt_Source["Trustworthy","Court.Orders"] / Corrupt_Source["Trustworthy","Executive..Police..etc."]
+
+# The odds ratio is just one divided by the other
+corrupt_odds / trustworthy_odds
+
+## 3. Count data, both variables in rows
+
+# Let's see if corrupt countries are likely to target different products
+# than trustworthy ones.  For this, we can't aggregate our data by Country
+# so go back to the original request data, and merge in the high_cpi variable
+# also, remove countries that are missing corruption data
+Requests2 = merge(Countries[,c("Country", "high_cpi")], Requests, by="Country")
+Requests2 = Requests2[ ! is.na(Requests2$high_cpi),]
+head(Requests2)
+
+# We want separate columns for takedown requests from corrupt countries
+# and from trustworthy countries.  Here, we create both columns, and copy
+# each value for total.takedowns to the appropriate one.
+Corrupt_Product = Requests2[,c("Product","high_cpi")]
+Corrupt_Product$Corrupt = ifelse(Requests2$high_cpi == "Corrupt", Requests2$total.takedowns, 0)
+Corrupt_Product$Trustworthy = ifelse(Requests2$high_cpi == "Trustworthy", Requests2$total.takedowns, 0)
+
+# Observe that each row only has a positive value in one of the two new columns
+head(Corrupt_Product)
+
+# Next we sum Corrupt and Trustworthy columns for each product.
+Corrupt_Product =  aggregate(Corrupt_Product[,c("Corrupt","Trustworthy")], list( Product = Corrupt_Product$Product), sum)
+
+# We are left with a contingency table
+Corrupt_Product
+
+# We could have also created the table in one step, using the cast command
+library(reshape)
+Corrupt_Product = cast(Requests2, Product ~ high_cpi , fun = sum, value = c("total.takedowns"))
+Corrupt_Product
+
+# Run a chi-square test as before
+cs = chisq.test(Corrupt_Product[,c(-1)])
+cs
+
+# Check standardized residuals
+cs$stdres
+
+# And expected values
+cs$expected
+
+# The fisher test is probably too computationally intensive to run
+#fisher.test(Corrupt_Product[,c(-1)])
+
+# could also use monte-carlo simulation to check significance
+chisq.test(Corrupt_Product[,c(-1)], simulate.p.value = T)
+
+# let's use the function we wrote earlier to check the effect size
+cramers_v(cs)
+```
+
+## T-test
+
+#### T-test types
+
+* Independent
+* Dependent
+* Parametric/non-parametric
+  * if underline distribution is normally distributed => parametric
+  * if not non-parametric, can use rank
+    * wilcox.test()
+
+### dependent (pared) t test
+* t.test()
+* If dataframe has single column: use t.test(outcome ~ predictor, data, paired = F/T)
+* If dataframe has 2 columns: use t.test(score group 1, score group 2, paired = F/T)
+
+#### R functions for t-distribution
+* dt : Density of t-distributon
+* pt : Distribution prob of t-distribution
+* qt : quantile
+* rt : generate random variable
+
+
+
+## T-tests example 1
+```{r}
+# Use the Countries dataset, including takedown variables
+load("./data/Countries3.Rdata")
+summary(Countries)
+
+
+# look at log gdp between the corrupt and
+# trustworthy Country groups
+Countries$loggdp = log10(Countries$gdp)
+
+# The means look different between groups
+by(Countries$loggdp, Countries$high_cpi, mean, na.rm = TRUE)
+
+# But is this statistically significant?
+
+# From the qqplot, it's not clear if loggdp is normally distributed
+qqnorm(Countries$loggdp)
+
+# The Shapiro test suggests that it's not
+shapiro.test(Countries$loggdp)
+
+# But we have a large sample size, so we can rely on 
+# the central limit theorem and use a regular t.test
+t.test(Countries$loggdp ~ Countries$high_cpi, Countries)
+
+
+## Computing effect sizes
+# We can manually compute Cohen's d, a common measure of effect
+# size for the difference between two means.
+# Quite simply, Cohen's d is the difference between the means
+# divided by their pooled standard error.
+# We'll place our code in a function so we can use it again later
+cohens_d <- function(x, y) {
+	# this function takes two vectors as inputs, and compares
+	# their means
+	
+	# first, compute the pooled standard error
+  lx = length(subset(x,!is.na(x)))
+  ly = length(subset(y,!is.na(y)))
+	# numerator of the pooled variance:
+	num = (lx-1)*var(x, na.rm=T) + (ly-1)*var(y, na.rm=T)
+	pooled_var = num / (lx + ly - 2) # variance
+	pooled_sd = sqrt(pooled_var)
+	
+	# finally, compute cohen's d
+	cd = abs(mean(x, na.rm=T) - mean(y, na.rm=T)) / pooled_sd
+	return(cd)
+}
+
+# get the vectors of loggdp for each of our two groups
+loggdp_c = Countries$loggdp[Countries$high_cpi=="Corrupt"]
+loggdp_t = Countries$loggdp[Countries$high_cpi=="Trustworthy"]
+
+# plug them into our cohen's d function
+cohens_d(loggdp_c, loggdp_t)
+
+# We could also compute the effect size correlation
+# this is, quite simply, the correlation between the our metric
+# variable and our grouping variable (suitably dummy-coded)
+cor.test(Countries$loggdp, as.numeric(factor(Countries$high_cpi)))
+
+## 2. Suppose we were just looking at countries in the Americas
+Americas = Countries[Countries$region == "Americas",]
+summary(Americas)
+
+# We may ask whether the more corrupt countries in this 
+# group issue more or less takedown requests than the 
+# more trustworthy ones
+by(Americas$total.takedowns, Americas$high_cpi, mean, na.rm = TRUE)
+
+# Notice that total takedowns is not at all normal.
+qqnorm(Americas$total.takedowns)
+
+# Use the Wilcoxon rank-sum test to compare means
+wilcox.test(Americas$total.takedowns ~ Americas$high_cpi)
+
+# we can compute cohen's d using the function we wrote earlier
+takedowns_c = Americas$total.takedowns[Americas$high_cpi == "Corrupt"]
+takedowns_t = Americas$total.takedowns[Americas$high_cpi == "Trustworthy"]
+cohens_d(takedowns_c, takedowns_t)
+
+## Let's finally compare the number of takedown requests
+# issued by courts, with those issued by executives / police
+mean(Countries$Court.Orders, na.rm = T)
+mean(Countries$Executive, na.rm = T)
+
+# Because there is just one group of countries, with two
+# variables per country, we need a paired-samples test 
+# (paired = TRUE)
+#
+# In general, we need a paired-sample t-test whenever
+# we can pair each observation in one sample with an
+# observation in the other sample, and when we expect
+# the observations in each pair to vary together to
+# some extent.
+#
+# The pairing could be formed in several ways:
+#
+# 1. We have two variables for each unit of analysis
+# The classic example here is giving a test twice to
+# the same group of individuals (pretest-posttest).
+# But we could also take two different measurements at
+# the same time - such as court ordered takedowns and
+# executive-ordered takedowns in our example.
+#
+# 2. We have a natural pairing between units of analysis
+# This could be the case for measurements on twins, or
+# spouses.
+#
+# 3. We create a matched sample by pairing units of
+# analysis with similar characteristics
+
+
+# Because of the large sample size, we can use the parametric
+# t-test
+t.test(Countries$Court.Orders, Countries$Executive, paired = T)
+
+# effect size
+cohens_d(Countries$Court.Orders, Countries$Executive)
+```
+
+
+### T-Test Example 2
+
+```{r}
+# loading library
+library(ggplot2)
+library(pastecs)
+
+# Reading US senator data
+senate_data <- read.csv("data/united_states_senate_2014.csv")
+
+# Rename long column name with shorter names
+names(senate_data)[names(senate_data) == "Campaign.Money.Raised..millions.of..."] <- "Raised"
+names(senate_data)[names(senate_data) == "Campaign.Money.Spent..millions.of..."] <- "Spent"
+
+# Review the data
+summary(senate_data)
+
+# questions 1
+# Is there a difference between the amount of money a senator raises and the amount spent?
+
+# Checking assumption
+# Normality
+qqnorm(senate_data$Raised)
+qqnorm(senate_data$Spent)
+hist(senate_data$Raised)
+hist(senate_data$Spent)
+
+# Although it is normal but due to large sample size of 100, we can use parametric testing
+
+# dependent (pared) t test
+# t.test()
+# If dataframe has single column: use t.test(outcome ~ predictor, data, paired = F/T)
+# If dataframe has 2 columns: use t.test(score group 1, score group 2, paired = F/T)
+
+# H0: Raised = Spent
+# Ha: Raised != Spent
+
+# We have 2 columns, and they are paired or dependent
+raised_vs_spent <- t.test(senate_data$Raised, senate_data$Spent, paired=T)
+raised_vs_spent
+
+# The results showed that the P-value is < 0.05 which is significant, 95 % CI does not contain
+# 0 which means that we can reject the null hypothesis that there is no difference
+
+# calculate the effect size
+t <- raised_vs_spent$statistic[[1]]
+df <- raised_vs_spent$parameter[[1]]
+r <- sqrt(t^2/(t^2 + df))
+round(r, 3)
+
+# The effect size (r) is 0.598, it is practical significant
+
+# Question 2
+# Do female Democratic senators raise more or less money than female Republican senators?
+female_senate = senate_data[senate_data$Gender == "Female",]
+
+# need to check assumption because the sample is small only 20 female senator
+qqnorm(female_senate$Raised)
+shapiro.test(female_senate$Raised)
+
+# Not normal, and due to small sample, we should use non-parametric test
+# And it is not paired groups 1) the size of the group are different 2) the are not paired
+# wilcox.test()
+# if single column, wilcox.test(outcome ~ predictor, data, paired = T/F)
+# if two columns, wilcox.test(score group1,  score group2, paired = T/F)
+
+# H0: Female democratic senator raise = female republican
+# Ha: Female democratic senator raise != female republican
+wilcox_test_out <- wilcox.test(female_senate$Raised ~ female_senate$Party, female_senate)
+wilcox_test_out
+
+# P-value is < 0.05 which means it is statistically significant and we can reject the H0
+
+# Calculate Effect size
+z = qnorm(wilcox_test_out$p.value/2)
+n = length(female_senate$Gender)
+r = z/sqrt(n)
+r
+# Effect size is -0.538 and it is practically significant as well
+
+# Quesitons 3
+# Do protestant Senators spend more or less money than non-protestant senators?
+# Create a categorical variable that determine whether a senator is protestant
+senate_data$is.protestant = senate_data$Religion == "Protestant"
+
+# look at the column
+summary(senate_data$is.protestant)
+
+# H0: protestant senators spend the same is non-protestant
+# Ha: Not spent the same
+# This is parametric test with reasonable large sample
+# This is not a paired test
+protestant_test <- t.test(senate_data$Spent ~ senate_data$is.protestant, senate_data)
+protestant_test
+
+# p value is > 0.05, we cannot reject the null hypothesis that they spend the same
+
+# Calculate effect size
+t <- protestant_test$statistic[[1]]
+df <- protestant_test$parameter[[1]]
+r <- sqrt(t^2/(t^2 + df))
+round(r, 3)
+
+# The effect size is 0.129 which is small
+
+# bootstrap method to compare median
+x1 = runif(100)
+x2 = runif(100) + .1
+median(x1)
+median(x2)
+func1 = function() {
+    s1 = sample(x=x1, replace=T, size=100)
+    s2 = sample(x=x2, replace=T, size=100)
+    out = median(s1) - median(s2)
+}
+
+bs = replicate(n = 1000, expr = func1())
+
+median(x2)
+```
+
+
+## ANOVA
+
+* Test several means of different groups
+* Conceptualized as Multiple regression
+  * Test overall regression model is significant
+* F-distribution (experimental manipulation has some effect)
+* Evalute overall variation
+  * compare variability between groups to the variability within groups
+* F-Ration: Model Divided by error
+
+```{r}
+# A demonstration of ANOVA in R
+
+# Load Youtube video data
+load("data/Videos_clean.Rdata")
+summary(Videos)
+
+
+# check the rate variable for normality
+hist(Videos$rate)
+
+# That's not great, but remember that ANOVA is a robust-test
+# and the data is on a 1-5 scale, which isn't normally
+# a place we'd worry
+
+# Let's look at the means, by each category and overall
+by(Videos$rate, Videos$category, mean, na.rm=T)
+mean(Videos$rate, na.rm=T)
+
+# We can get nicer output with the tapply function
+tapply(Videos$rate, Videos$category, mean, na.rm=T)
+
+# Perform the analysis of variance and check the significance
+aovm = aov(rate ~ category, Videos)
+summary(aovm)
+```
+
